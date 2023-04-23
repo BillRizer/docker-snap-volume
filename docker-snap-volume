@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# -o pipefail -> If any command in a pipeline fails, that return code will be used as the return code of the whole pipeline.
+# -e -> Immediately exit if any command [1] has a non-zero exit status
+set -e -o pipefail
+
+if [ $? -ne 0 ]; then
+    echo "getopt error"
+    exit 1
+fi
+usage()
+{
+    echo -e " -\nDOCKER-SNAP-VOLUME 
+    Usage: [ --create | --restore ] [ -n | --name ]<volume_name> [ -f | --file ]<absolute_filepath>\n"
+    echo -e "> CREATE SNAPSHOT:\n docker-snap-volume -n my-volume-name -f /absolute/path/volume-snapshot.tar --create"
+    echo -e "\n> RESTORE SNAPSHOT:\n docker-snap-volume -n my-volume-name -f /absolute/path/volume-snapshot.tar --restore"
+    echo -e "-\n"
+    exit 2
+}
+
+action_create(){
+    VOLUME_NAME=$1
+    VOLUME_FILE=$2
+    VOLUME_FILENAME=`basename $VOLUME_FILE`
+    VOLUME_ABSOLUTE_PATH=`dirname $VOLUME_FILE`
+    # check if file exists
+    echo "-> May take several minutes, depending on the size of the volume"
+    docker run --rm -v "$VOLUME_NAME:/source" -v "$VOLUME_ABSOLUTE_PATH:/dest" busybox tar cvf "/dest/$VOLUME_FILENAME" -C /source . >/dev/null 2>&1
+    FULL_FILE=$VOLUME_ABSOLUTE_PATH/$VOLUME_FILENAME
+    FILE_SIZE=$(ls -lh $FULL_FILE | awk '{print  $5}')
+    echo "file saved to $FULL_FILE size[$FILE_SIZE] volume[$VOLUME_NAME]"
+    echo "Done."
+    echo "-----------------------------------------------------------------"
+    echo "To RESTORE the volume use this command:"
+    echo "docker-snap-volume -n $VOLUME_NAME -f $FULL_FILE --restore"
+    echo "-----------------------------------------------------------------"
+    echo -e "\n"
+} 
+action_restore(){
+    VOLUME_NAME=$1
+    VOLUME_FILE=$2
+    VOLUME_FILENAME=`basename $VOLUME_FILE`
+    VOLUME_ABSOLUTE_PATH=`dirname $VOLUME_FILE`
+    # check if file exists
+    echo "-> May take several minutes, depending on the size of the volume"
+    docker run --rm -v "$VOLUME_NAME:/dest" -v "$VOLUME_ABSOLUTE_PATH:/source" busybox tar xvf "/source/$VOLUME_FILENAME" -C /dest >/dev/null 2>&1
+    echo "Done."
+    FULL_FILE=$VOLUME_ABSOLUTE_PATH/$VOLUME_FILENAME
+    FILE_SIZE=$(ls -lh $FULL_FILE | awk '{print  $5}')
+    echo "The restored snapshot was $FULL_FILE  size[$FILE_SIZE] volume[$VOLUME_NAME]"
+    echo -e "\n!! RESTART the containers that use this volume !!\n"
+}
+
+OPTIONS=$(getopt -o hcrn:f: -l help,create,restore,name:,file: -- "$@")
+
+eval set -- $OPTIONS
+while true; do
+    case "$1" in
+        -h|--help) usage ;;
+        -c|--create) ACTION="create" ;;
+        -r|--restore) ACTION="restore" ;;
+        -n|--name) VOLUME_NAME="$2" ; shift ;;
+        -f|--file) VOLUME_FILE="$2" ; shift ;;
+        --) shift; break ;;
+        *)         echo "unknown option: $1" ; exit 1 ;;
+    esac
+    shift
+done
+if [[ -z $ACTION ]]||[[ -z $VOLUME_NAME ]]||[[ -z $VOLUME_FILE ]]; then
+    echo "Missing parameter "
+    usage
+    exit 1
+fi
+
+case "$ACTION" in
+    create) action_create "$VOLUME_NAME" "$VOLUME_FILE" ;;
+    restore) action_restore "$VOLUME_NAME" "$VOLUME_FILE" ;;
+    *)         echo "unknown action"; exit 1 ;;
+esac
