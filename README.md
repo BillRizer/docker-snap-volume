@@ -1,11 +1,11 @@
 # docker-snap-volume
 This tool creates and restores snapshot volumes on docker, when creating a snapshot a .tar is generated that can be restored to the volume
 
-# motivation:
+### motivation:
 I was making a script that patched a gigantic database, and needed to restore it to the current state in the fastest way (importing a dump took over 7hrs). so I found a snapshot tool for docker simpler.
 
 
-get script
+### get script
 ````bash 
 sudo curl -SL https://raw.githubusercontent.com/BillRizer/docker-snap-volume/main/docker-snap-volume -o /usr/local/bin/docker-snap-volume
 ````
